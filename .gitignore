@@ -1,0 +1,11 @@
+# IDEs & System
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Flutter & Node Global
+**/build/
+**/node_modules/
+.dart_tool/
