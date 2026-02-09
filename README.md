@@ -1,7 +1,3 @@
-Hier ist eine professionelle und vollständige **README.md** für dein Projekt. Sie deckt alles ab: Backend-Einrichtung (Supabase), die Mobile App (Flutter) und das Web Dashboard (React).
-
-Du kannst diese Datei einfach in das Hauptverzeichnis deines Projekts kopieren.
-
 ---
 
 # 📱 Social Detox Tracker
