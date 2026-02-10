@@ -6,9 +6,18 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [username, setUsername] = useState('') // NEU: State für den Namen
+  const [username, setUsername] = useState('') 
   const [isSignUp, setIsSignUp] = useState(false) 
   const [msg, setMsg] = useState('')
+  
+  const checkUsernameTaken = async (usernameToCheck: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', usernameToCheck)
+      .maybeSingle(); // 'maybeSingle' gibt null zurück, wenn nicht gefunden (wirft keinen Fehler)
+    return !!data; // True wenn gefunden, False wenn nicht
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -17,34 +26,51 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
 
     try {
       if (isSignUp) {
-        // VALIDIERUNG: Name muss da sein
+        // 1. VALIDIERUNG: Ist ein Name eingegeben?
         if (!username.trim()) {
           setMsg('Bitte wähle einen Benutzernamen.')
           setLoading(false)
           return
         }
 
-        // REGISTRIEREN MIT METADATEN
+        // 2. CHECK: Ist der Name schon vergeben?
+        const isTaken = await checkUsernameTaken(username.trim());
+        if (isTaken) {
+          setMsg('Dieser Benutzername ist bereits vergeben! 😕')
+          setLoading(false)
+          return;
+        }
+
+        // 3. REGISTRIERUNG: Wenn alles okay ist
         const { error } = await supabase.auth.signUp({ 
           email, 
           password,
           options: {
             data: {
-              username: username, // HIER wird der Name an die DB gesendet
-              avatar_url: '' // Optional leer lassen
+              username: username.trim(), // WICHTIG: Name wird hier gespeichert
+              avatar_url: '' 
             }
           }
         })
         if (error) throw error
-        setMsg('Account erstellt! Du bist eingeloggt.')
+        setMsg('Account erstellt! Bitte checke deine E-Mails (oder logge dich ein, falls Auto-Confirm aktiv ist).')
+      
       } else {
-        // LOGIN (Bleibt gleich)
+        // LOGIN
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       }
+      
+      // Wenn kein Fehler flog -> Erfolg melden
       onLoginSuccess() 
+
     } catch (error: any) {
-      setMsg(error.message)
+      // Falls doch noch ein Datenbank-Fehler durchrutscht (z.B. Race Condition)
+      if (error.code === '23505') {
+        setMsg('Dieser Name ist leider schon vergeben.')
+      } else {
+        setMsg(error.message)
+      }
     } finally {
       setLoading(false)
     }
@@ -62,13 +88,15 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
         <h2 className="text-2xl font-bold text-center text-gray-900 mb-2">
           {isSignUp ? 'Account erstellen' : 'Willkommen zurück'}
         </h2>
+        
+        {/* Hier eine kleine dynamische Unterzeile */}
         <p className="text-center text-gray-500 mb-8">
-          Social Detox beginnt hier.
+          {isSignUp ? 'Starte heute dein Detox.' : 'Schön, dass du wieder da bist.'}
         </p>
 
         <form onSubmit={handleAuth} className="space-y-4">
           
-          {/* NEU: Username Feld (Nur sichtbar bei Registrierung) */}
+          {/* USERNAME FELD (Nur bei Registrierung sichtbar) */}
           {isSignUp && (
             <div className="animate-fade-in">
               <label className="block text-sm font-medium text-gray-700 mb-1">Benutzername</label>
@@ -116,11 +144,15 @@ export default function Login({ onLoginSuccess }: { onLoginSuccess: () => void }
             </div>
           </div>
 
-          {msg && <p className="text-red-500 text-sm text-center font-medium">{msg}</p>}
+          {msg && (
+            <div className={`text-sm text-center font-medium p-3 rounded-lg ${msg.includes('erstellt') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+              {msg}
+            </div>
+          )}
 
           <button 
             disabled={loading}
-            className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-brand-500/20 flex justify-center items-center gap-2"
+            className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-brand-500/20 flex justify-center items-center gap-2 disabled:opacity-70"
           >
             {loading && <Loader2 className="animate-spin" size={20} />}
             {isSignUp ? 'Registrieren' : 'Anmelden'}

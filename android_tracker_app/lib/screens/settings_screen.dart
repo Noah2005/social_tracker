@@ -50,14 +50,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _saving = true);
     final userId = Supabase.instance.client.auth.currentUser!.id;
     
-    await Supabase.instance.client.from('profiles').update({
-      'username': _nameController.text,
-      'avatar_url': _selectedColorClass, // Wir speichern den Tailwind-String!
-    }).eq('id', userId);
+    try {
+      await Supabase.instance.client.from('profiles').update({
+        'username': _nameController.text.trim(), // .trim() entfernt Leerzeichen
+        'avatar_url': _selectedColorClass,
+      }).eq('id', userId);
 
-    if (mounted) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gespeichert!"), backgroundColor: Colors.green),
+        );
+      }
+    } on PostgrestException catch (error) {
+      // HIER FANGEN WIR DEN FEHLER AB
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gespeichert!")));
+      if (error.code == '23505') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Name leider schon vergeben! 😕"), 
+              backgroundColor: Colors.red
+            ),
+          );
+        }
+      } else {
+        debugPrint("Anderer Fehler: ${error.message}");
+      }
+    } catch (e) {
+      setState(() => _saving = false);
+      debugPrint("Unbekannter Fehler: $e");
     }
   }
 
