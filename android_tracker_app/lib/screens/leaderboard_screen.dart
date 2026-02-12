@@ -22,33 +22,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   Future<void> _fetchLeaderboard() async {
     try {
-      final data = await Supabase.instance.client
-          .from('monthly_leaderboard')
-          .select('monthly_score, user_id, username, avatar_url')
-          .order('monthly_score', ascending: false);
-
-      if (mounted) {
-        setState(() {
-          _leaderboardData = List<Map<String, dynamic>>.from(data.map((item) {
-            return {
-              'daily_score': item['monthly_score'],
-              'user_id': item['user_id'],
-              'profiles': {
-                'username': item['username'],
-                'avatar_url': item['avatar_url']
-              }
-            };
-          }));
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Fehler: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+      final data = await Supabase.instance.client.from('monthly_leaderboard').select('monthly_score, user_id, username, avatar_url').order('monthly_score', ascending: false);
+      if (mounted) setState(() { _leaderboardData = List<Map<String, dynamic>>.from(data.map((item) => {'daily_score': item['monthly_score'], 'user_id': item['user_id'], 'profiles': {'username': item['username'], 'avatar_url': item['avatar_url']}})); _isLoading = false; });
+    } catch (e) { if (mounted) setState(() => _isLoading = false); }
   }
 
-  // --- NEU: Logik für Ränge und Farben ---
+  Future<void> _startChallenge(String opponentId, String opponentName) async {
+    final existing = await Supabase.instance.client.from('battles').select().or('status.eq.pending,status.eq.active').or('and(challenger_id.eq.$_myUserId,opponent_id.eq.$opponentId),and(opponent_id.eq.$_myUserId,challenger_id.eq.$opponentId)');
+    if (existing.isNotEmpty) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Es läuft bereits ein Battle mit $opponentName!"), backgroundColor: Colors.orange)); return; }
+    
+    if (!mounted) return;
+    String? duration = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: Text("Fordere $opponentName heraus!"), children: [SimpleDialogOption(onPressed: () => Navigator.pop(ctx, '1_day'), child: const Padding(padding: EdgeInsets.all(8), child: Text("🔥 1 Tag (Sprint)"))), SimpleDialogOption(onPressed: () => Navigator.pop(ctx, '7_days'), child: const Padding(padding: EdgeInsets.all(8), child: Text("📅 1 Woche (Standard)"))), SimpleDialogOption(onPressed: () => Navigator.pop(ctx, '30_days'), child: const Padding(padding: EdgeInsets.all(8), child: Text("🏆 1 Monat (Marathon)")))]));
+    if (duration == null) return;
+
+    try { await Supabase.instance.client.from('battles').insert({'challenger_id': _myUserId, 'opponent_id': opponentId, 'duration': duration, 'status': 'pending'}); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Herausforderung an $opponentName gesendet!"), backgroundColor: Colors.green)); } 
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fehler beim Senden"), backgroundColor: Colors.red)); }
+  }
+
   Map<String, dynamic> _getRankInfo(int score) {
     if (score > 2500) return {'name': 'Master', 'color': Colors.deepPurple, 'bg': Colors.deepPurple.shade50};
     if (score > 2000) return {'name': 'Diamond', 'color': Colors.cyan, 'bg': Colors.cyan.shade50};
@@ -58,7 +48,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return {'name': 'Bronze', 'color': Colors.brown, 'bg': Colors.orange.shade50};
   }
 
-  // Helper für Avatar Farbe aus Tailwind String
   Color _getColorFromTailwind(String? tailwindClass) {
     if (tailwindClass == null) return Colors.deepPurple.shade100;
     if (tailwindClass.contains('blue')) return Colors.blue.shade100;
@@ -71,131 +60,46 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyMedium?.color;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text("Bestenliste (Monat)"),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.deepPurple),
-            onPressed: () {
-              setState(() => _isLoading = true);
-              _fetchLeaderboard();
-            },
-          )
-        ],
+      appBar: AppBar(title: Text("Bestenliste (Monat)", style: TextStyle(color: textColor)), backgroundColor: Theme.of(context).appBarTheme.backgroundColor, actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.deepPurple), onPressed: () { setState(() => _isLoading = true); _fetchLeaderboard(); })]),
+      body: _isLoading ? const Center(child: CircularProgressIndicator()) : _leaderboardData.isEmpty ? const Center(child: Text("Noch keine Teilnehmer diesen Monat.")) : ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _leaderboardData.length,
+        itemBuilder: (context, index) {
+          final item = _leaderboardData[index];
+          final profile = item['profiles'] as Map<String, dynamic>?;
+          final username = profile?['username'] ?? 'Unbekannt';
+          final avatarClass = profile?['avatar_url'] as String?;
+          final score = item['daily_score'] ?? 0;
+          final userId = item['user_id'];
+          final isMe = userId == _myUserId;
+          final rankInfo = _getRankInfo(score);
+
+          return Card(
+            elevation: isMe ? 4 : 0,
+            shadowColor: isMe ? Colors.deepPurple.withOpacity(0.2) : null,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: isMe ? const BorderSide(color: Colors.deepPurple, width: 1.5) : BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade100)),
+            margin: const EdgeInsets.only(bottom: 12),
+            color: cardColor,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  SizedBox(width: 30, child: Text("#${index + 1}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: index == 0 ? Colors.amber : Colors.grey.shade400))),
+                  CircleAvatar(backgroundColor: _getColorFromTailwind(avatarClass), radius: 20, child: Text(username.isNotEmpty ? username[0].toUpperCase() : "?", style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold))),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(isMe ? "$username (Du)" : username, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isMe ? (isDark ? Colors.white : Colors.black) : textColor)), Text("$score Pkt", style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500))])),
+                  if (!isMe) IconButton(icon: const Icon(Icons.sports_kabaddi, color: Colors.orange), onPressed: () => _startChallenge(userId, username)) else Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: rankInfo['bg'], borderRadius: BorderRadius.circular(12), border: Border.all(color: rankInfo['color'].withOpacity(0.2))), child: Text(rankInfo['name'], style: TextStyle(color: rankInfo['color'], fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+              ),
+            ),
+          );
+        },
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _leaderboardData.isEmpty
-              ? const Center(child: Text("Noch keine Teilnehmer diesen Monat."))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _leaderboardData.length,
-                  itemBuilder: (context, index) {
-                    final item = _leaderboardData[index];
-                    final profile = item['profiles'] as Map<String, dynamic>?;
-                    final username = profile?['username'] ?? 'Unbekannt';
-                    final avatarClass = profile?['avatar_url'] as String?;
-                    final score = item['daily_score'] ?? 0;
-                    final userId = item['user_id'];
-                    final isMe = userId == _myUserId;
-
-                    // Rank Info holen
-                    final rankInfo = _getRankInfo(score);
-
-                    return Card(
-                      elevation: isMe ? 4 : 0,
-                      shadowColor: isMe ? Colors.deepPurple.withOpacity(0.2) : null,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: isMe 
-                          ? const BorderSide(color: Colors.deepPurple, width: 1.5) 
-                          : BorderSide(color: Colors.grey.shade100),
-                      ),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      color: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            // 1. RANG NUMMER
-                            SizedBox(
-                              width: 30,
-                              child: Text(
-                                "#${index + 1}",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: index == 0 ? Colors.amber : Colors.grey.shade400,
-                                ),
-                              ),
-                            ),
-                            
-                            // 2. AVATAR
-                            CircleAvatar(
-                              backgroundColor: _getColorFromTailwind(avatarClass),
-                              radius: 20,
-                              child: Text(
-                                username.isNotEmpty ? username[0].toUpperCase() : "?",
-                                style: const TextStyle(
-                                  color: Colors.black87, 
-                                  fontWeight: FontWeight.bold
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            
-                            // 3. NAME & SCORE
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    isMe ? "$username (Du)" : username,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: isMe ? Colors.black : Colors.black87,
-                                    ),
-                                  ),
-                                  Text(
-                                    "$score Pkt",
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // 4. RANG BADGE (Bronze, Silber, etc.)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: rankInfo['bg'],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: rankInfo['color'].withOpacity(0.2)),
-                              ),
-                              child: Text(
-                                rankInfo['name'],
-                                style: TextStyle(
-                                  color: rankInfo['color'],
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
     );
   }
 }

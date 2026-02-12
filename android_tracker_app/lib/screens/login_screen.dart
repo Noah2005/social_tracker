@@ -24,7 +24,6 @@ class _LoginScreenState extends State<LoginScreen> {
           .select('username')
           .eq('username', username)
           .maybeSingle(); 
-      
       return data != null; 
     } catch (e) {
       debugPrint("Fehler beim Namens-Check: $e");
@@ -34,8 +33,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleAuth() async {
     setState(() => _isLoading = true);
-    
-    // Tastatur schließen
     FocusManager.instance.primaryFocus?.unfocus();
 
     try {
@@ -44,64 +41,32 @@ class _LoginScreenState extends State<LoginScreen> {
       final username = _usernameController.text.trim();
 
       if (_isSignUp) {
-        // --- VALIDIERUNG FÜR REGISTRIERUNG ---
-        
-        if (username.isEmpty) {
-          // FIX: Nachricht direkt übergeben, ohne "message:"
-          throw const AuthException('Bitte wähle einen Benutzernamen.');
-        }
-
-        // 1. Check: Ist der Name schon vergeben?
+        if (username.isEmpty) throw const AuthException('Bitte wähle einen Benutzernamen.');
         final isTaken = await _checkUsernameTaken(username);
-        if (isTaken) {
-          // FIX: Nachricht direkt übergeben
-          throw const AuthException('Dieser Name ist leider schon vergeben! 😕');
-        }
+        if (isTaken) throw const AuthException('Dieser Name ist leider schon vergeben! 😕');
 
-        // 2. Registrieren
         await Supabase.instance.client.auth.signUp(
           email: email,
           password: password,
-          data: {
-            'username': username, 
-          },
+          data: {'username': username},
         );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account erstellt! Du wirst eingeloggt...'),
-              backgroundColor: Colors.green,
-            ),
+            const SnackBar(content: Text('Account erstellt! Du wirst eingeloggt...'), backgroundColor: Colors.green),
           );
         }
-
       } else {
-        // --- LOGIN ---
-        await Supabase.instance.client.auth.signInWithPassword(
-          email: email,
-          password: password,
-        );
+        await Supabase.instance.client.auth.signInWithPassword(email: email, password: password);
       }
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
       }
-
     } on AuthException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message), backgroundColor: Colors.red));
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ein unerwarteter Fehler ist aufgetreten.'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ein unerwarteter Fehler ist aufgetreten.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -109,8 +74,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Farbe für Texteingaben (Schwarz auf Hell, Weiß auf Dunkel)
+    final inputTextColor = Theme.of(context).textTheme.bodyMedium?.color;
+    final cardColor = Theme.of(context).cardColor;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), 
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -122,16 +91,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: BoxDecoration(
                   color: Colors.deepPurple,
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(color: Colors.deepPurple.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))
-                  ]
+                  boxShadow: [BoxShadow(color: Colors.deepPurple.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]
                 ),
                 child: const Icon(Icons.trending_down, size: 48, color: Colors.white),
               ),
               const SizedBox(height: 24),
               Text(
                 _isSignUp ? 'Konto erstellen' : 'Willkommen zurück',
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: inputTextColor),
               ),
               const SizedBox(height: 8),
               Text(
@@ -143,15 +110,14 @@ class _LoginScreenState extends State<LoginScreen> {
               if (_isSignUp) ...[
                 TextField(
                   controller: _usernameController,
+                  style: TextStyle(color: inputTextColor), // WICHTIG: Textfarbe
                   decoration: InputDecoration(
                     labelText: 'Benutzername',
                     hintText: 'Wie sollen wir dich nennen?',
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: cardColor,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     prefixIcon: const Icon(Icons.person, color: Colors.deepPurple),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.deepPurple, width: 2)),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -160,14 +126,13 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                style: TextStyle(color: inputTextColor), // WICHTIG
                 decoration: InputDecoration(
                   labelText: 'E-Mail',
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: cardColor,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   prefixIcon: const Icon(Icons.email, color: Colors.deepPurple),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.deepPurple, width: 2)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -175,14 +140,13 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: true,
+                style: TextStyle(color: inputTextColor), // WICHTIG
                 decoration: InputDecoration(
                   labelText: 'Passwort',
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: cardColor,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   prefixIcon: const Icon(Icons.lock, color: Colors.deepPurple),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.deepPurple, width: 2)),
                 ),
               ),
               const SizedBox(height: 32),

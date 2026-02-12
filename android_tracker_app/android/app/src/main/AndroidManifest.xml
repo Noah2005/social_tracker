@@ -6,7 +6,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
-        android:label="social_tracker"
+        android:label="Social Tracker"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -30,7 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  usage_stats: ^1.2.0 # Prüft auf die aktuellste Version
+  shared_preferences: ^2.2.2
+  usage_stats: ^1.2.0 
   supabase_flutter: ^2.8.0 
 
   # The following adds the Cupertino Icons font to your application.

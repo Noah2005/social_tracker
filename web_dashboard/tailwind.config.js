@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class', // <--- DIESE ZEILE IST ENTSCHEIDEND!
   theme: {
     extend: {
       fontFamily: {
